@@ -1,0 +1,106 @@
+<?xml version="1.0"?>
+<xyhl>
+<!--
+Configuración de los proyectos para hacer gráficos temporales con umbrales: 
+1. db: base de datos
+2. select_master: select donde se extraen los codigos de los sondeos que se van a hacer los XY.
+   de las columnas de esta select se extraen además el título y el nombre del fichero XY
+2.1 parameter_select_data_column: número de columna en select_master que contiene el código del punto (COD)
+2.2 file name: nombre del fichero de salida. Debe contener al menos un {} para identificar unívocamente cada fichero
+		Contiene tantos tag column como {}. Column contiene el número de columna cuyo valor se sustituirá por cada {}
+-->
+	<project name="Vega Media. CNP con umbrales 2018 y DIA">
+		<dir_out>C:\Users\solis\Documents\work\VM\umbrales_out</dir_out>
+		<db>C:\Users\solis\Documents\DB\ipasub97.mdb</db>
+		<select_master id_column="1">
+            SELECT IPA1.COD AS COD, IPA1_UMBRAL.COD_UMBRAL AS COD_UMBRAL, First(IPA1.TOPONIMIA) AS TOPONIMIA, First(ACUIFEROS.NOMACU) AS NOMACU, First(ACUIFEROS.MASUB) AS MASUB
+            FROM (ACUIFEROS INNER JOIN IPA1 ON ACUIFEROS.COD_ACU = IPA1.ACUIFERO) INNER JOIN IPA1_UMBRAL ON IPA1.COD = IPA1_UMBRAL.COD
+            GROUP BY IPA1.COD, IPA1_UMBRAL.COD_UMBRAL
+            HAVING (((IPA1_UMBRAL.COD_UMBRAL)='CSA 26/5/2018'))
+            ORDER BY IPA1.COD;
+			<file_name>{0:d}_{1}_{2}.png
+				<column>5</column>
+				<column>4</column>
+				<column>1</column>
+			</file_name>
+		</select_master>
+		<select_master_related id_master="1">
+		
+		</select_master_related>
+		<select_data fecha_column="2" value_column="4">
+            SELECT IPA2.COD, IPA2.FECHA, IPA2.SITUACION, [ipa1].[z]-[pnp] AS CNP
+            FROM IPA1 INNER JOIN IPA2 ON IPA1.COD = IPA2.COD
+            WHERE IPA2.COD=? AND IPA2.FECHA>=#5/1/2018#
+            ORDER BY IPA2.FECHA;
+		</select_data>
+		<select_umbrales umbral_column="3">
+			SELECT IPA1_UMBRAL.COD_UMBRAL, IPA1_UMBRAL.PARAMETRO, IPA1_UMBRAL.UMBRAL
+			FROM IPA1_UMBRAL
+			WHERE IPA1_UMBRAL.COD=? AND IPA1_UMBRAL.COD_UMBRAL=? AND IPA1_UMBRAL.PARAMETRO=?
+			ORDER BY IPA1_UMBRAL.COD, IPA1_UMBRAL.COD_UMBRAL, IPA1_UMBRAL.PARAMETRO;
+            <umbral cod="CSA 26/5/2018" parametro="CNP ND"/>
+            <umbral cod="CSA 26/5/2018" parametro="CNP NE"/>
+            <umbral cod="DIA 10/10/2011" parametro="CNP NE"/>
+		</select_umbrales>
+		<graph y_axis_name='CNP m s.n.m.'>
+			<title>Evolución piezométrica sondeo {} ({})
+				<column>3</column>
+				<column>1</column>
+			</title>
+			<title>Acuífero {}
+				<column>4</column>
+			</title>
+			<legend_master>'{}'
+				<column>1</column>
+			</legend_master>
+			<legend_umbrales>U. {0} {1}
+				<column>1</column>
+				<column>2</column>
+			</legend_umbrales>
+		</graph>
+	</project>
+
+	<project name="Cuenca Alta. Piezometría Sequía 2018">
+		<dir_out>E:\WORK\CHS\Mingogil\xy</dir_out>
+		<db>E:\BBDD\ipasub97.mdb</db>
+		<select_master id_column="1">
+		SELECT IPA1.COD, IPA1.TOPONIMIA, ACUIFEROS.NOMACU, ACUIFEROS.MASUB, IPA1_UMBRAL.COD_UMBRAL
+		FROM (ACUIFEROS INNER JOIN IPA1 ON ACUIFEROS.COD_ACU = IPA1.ACUIFERO) INNER JOIN IPA1_UMBRAL ON IPA1.COD = IPA1_UMBRAL.COD
+		WHERE IPA1_UMBRAL.COD_UMBRAL='DIA20111215'
+		ORDER BY IPA1.COD;
+			<file_name>{}_{}_{}.png
+				<column>3</column>
+				<column>1</column>
+				<column>2</column>
+			</file_name>
+		</select_master>
+		<select_data fecha_column="2" value_column="4">
+		SELECT IPA2.COD, IPA2.FECHA, IPA2.SITUACION, [ipa1].[z]-[pnp] AS CNP
+		FROM IPA1 INNER JOIN IPA2 ON IPA1.COD = IPA2.COD
+		WHERE IPA2.COD=?
+		ORDER BY IPA2.FECHA;
+		</select_data>
+		<select_umbrales umbral_column="3">
+			SELECT IPA1_UMBRAL.COD_UMBRAL, IPA1_UMBRAL.PARAMETRO, IPA1_UMBRAL.UMBRAL
+			FROM IPA1_UMBRAL
+			WHERE IPA1_UMBRAL.COD=? AND IPA1_UMBRAL.PARAMETRO='CNP ND'
+			ORDER BY IPA1_UMBRAL.COD, IPA1_UMBRAL.COD_UMBRAL, IPA1_UMBRAL.PARAMETRO;
+		</select_umbrales>
+		<graph y_axis_name='CNP m s.n.m.'>
+			<title>Evolución piezométrica sondeo {} ({})
+				<column>2</column>
+				<column>1</column>
+			</title>
+			<title>Acuífero {}
+				<column>3</column>
+			</title>
+			<legend_master>'{}'
+				<column>1</column>
+			</legend_master>
+			<legend_umbrales>Umbral {} {}
+				<column>1</column>
+				<column>2</column>
+			</legend_umbrales>
+		</graph>
+	</project>
+</xyhl>
