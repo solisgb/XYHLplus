@@ -10,7 +10,15 @@ import log_file as lf
 
 def select_project(FILENAME):
     """
-    returns the selected project
+    lee el fichero xml FILENAME, muestra los proyectos para que el usuario
+        escoja uno de ellos
+
+    input
+    FILENAME: fichero xml de estructura adecuada situada donde se encuentran
+        los scripts del programa
+
+    return:
+        el proyecto seleccionado por el usuario con un árbol xml
     """
     import xml.etree.ElementTree as ET
     tree = ET.parse(FILENAME)
@@ -96,7 +104,7 @@ def _serie_get(project, row, cur, id1, ifecha, ivalue):
     id1: código del punto cuyos datos cuyos queremos representar
 
     return
-    None or objeto Tine_series
+    None -si la serie no devuelve datos- or un objeto Time_series
     """
     from time_series import Time_series
     select_data = project.find('select_data').text.strip()
@@ -277,10 +285,9 @@ def XYt_1(t_series, stitle, ylabel, dst):
     dateFmt = mdates.DateFormatter('%d-%m-%Y')
 
     fig, ax = plt.subplots()
-    # TODO: arreglar la llamada a través de un objeto Time_series
-    ax.plot(fechas, values, marker='.', label=legend_master)
-    for i, vu1 in enumerate(values_u):
-        ax.plot(fechas_u, vu1, label=legends_umbrales[i])
+    # El primer objeto es el principal
+    for ts1 in t_series:
+        ax.plot(ts1.fechas, ts1.values, marker=ts1.marker, label=ts1.legend)
 
     plt.ylabel(ylabel)
     # rotate and align the tick labels so they look better
@@ -292,7 +299,7 @@ def XYt_1(t_series, stitle, ylabel, dst):
     ax.xaxis.set_major_formatter(dateFmt)
     ax.set_title(stitle)
     mpl.legend(loc='best', framealpha=0.5)
-    mpl.legend(loc='best', framealpha=0.5)
+#    mpl.legend(loc='best', framealpha=0.5)
     mpl.tight_layout()
     mpl.grid(True)
 
