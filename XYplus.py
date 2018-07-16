@@ -36,6 +36,7 @@ def make_graphs(project):
         project: es el tag del fichero XYplus_parameters.f_xml seleccionado
             en XYplus_main
     """
+    from copy import deepcopy
     from os.path import join
     import pyodbc
     import db_con_str
@@ -48,10 +49,6 @@ def make_graphs(project):
     select_master = project.find('select_master').text.strip()
     cur.execute(select_master)
 
-    select_data = project.find('select_data').text.strip()
-    npar = select_data.count('?')
-    if npar != 1:
-        raise ValueError('select_data debe tener un signo ?')
     id_col = int(project.find('select_master').get('id_column')) - 1
 
     cur2 = con.cursor()
@@ -61,40 +58,67 @@ def make_graphs(project):
     ylabel = project.find('graph').get('y_axis_name')
     for row in cur:
 
-        # datos de la serie
+        # datos de la serie principal
         print(row[id_col])
-        cur2.execute(select_data, row[id_col])
-        xy = [(row_data[fecha_col], row_data[value_col]) for row_data in cur2]
-        if len(xy) == 0:
-            print('{0} no tiene datos'.format(row[id_col]))
+        tmp = _serie_get(project, row, cur2, row[id_col], fecha_col, value_col)
+        if tmp is None:
             continue
-        fechas = [xy1[0] for xy1 in xy]
-        values = [xy1[1] for xy1 in xy]
+        series_4xy = [tmp]
 
-        # datos de los umbrales
+        # datos de los umbrales. Son series especiales
         if par.show_hl == 1:
-            fechas_u, values_u, legends_u = _umbrales_get(project, row[id_col],
-                                                          cur2, fechas[0],
-                                                          fechas[-1])
+            tss = _umbrales_get(project, row[id_col], cur2, tmp.fechas[0],
+                                tmp.fechas[-1])
+            for tss1 in tss:
+                if tss1:
+                    series_4xy.append(deepcopy(tss1))
 
         # elementos adicionales del gráfico
         stitle = get_title(project, row)
-        legend_master = legend_master_get(project, row)
         file_name = file_name_get(project, row)
         dst = join(dir_out, file_name)
 
-        if len(values_u) == 0:
-            XYt_1(fechas, values, legend_master, stitle, ylabel, dst)
-        else:
-            XYt_1(fechas, values, legend_master, stitle, ylabel, dst,
-                  fechas_u, values_u, legends_u)
+        # dibuja el gráfico
+        XYt_1(series_4xy, stitle, ylabel, dst)
 
     con.close()
 
 
+def _serie_get(project, row, cur, id1, ifecha, ivalue):
+    """
+    hace select a una BDD e instancia un objeto Temporal_series
+
+    input
+    project: tag del proyecto seleccionado
+    row: fila de select_master correspondiente al punto cuyos umbrales
+        queremos representar
+    cur: cursor a la BDD para seleccionar los datos
+    id1: código del punto cuyos datos cuyos queremos representar
+
+    return
+    None or objeto Tine_series
+    """
+    from time_series import Time_series
+    select_data = project.find('select_data').text.strip()
+    npar = select_data.count('?')
+    if npar != 1:
+        raise ValueError('select_data debe tener un signo ?')
+    cur.execute(select_data, id1)
+    xy = [(row_data[ifecha], row_data[ivalue]) for row_data in cur]
+    if len(xy) == 0:
+        lf.write('{0} no tiene datos'.format(id1))
+        return None
+    fechas = [xy1[0] for xy1 in xy]
+    values = [xy1[1] for xy1 in xy]
+    legend = _legend_main_get(project, row)
+    ts = Time_series(fechas, values, legend, marker='.')
+    return ts
+
+
 def _umbrales_get(project, id1, cur2, fecha1, fecha2):
     """
-    selecciona los datos del umbral o umbrales
+    selecciona los datos del umbral o umbrales y crea los correspondientes
+        obhetos Time_series
 
     input:
         project: tag del proyecto seleccionado
@@ -104,22 +128,16 @@ def _umbrales_get(project, id1, cur2, fecha1, fecha2):
         cur2: cursor a la BDD para seleccionar los datos
 
     return:
-        fechas_u: [[d1,d2],...n] n es el número de umbrales de id1
-                  [d1,d1] d1 es el date del umbral 1 de id1 y d2 es un
-                  date del umbral 1 de id1
-        values_u: [[u1,u1],...n] n es el número de umbrales de id1
-                  [u1,u1] u1 es el umbral 1 de id1
-        legends_u: [leg1,...n]  n es el número de umbrales de id1
-                   leg1 es la leyenda 1 del umbral 1 de id1
+        una lista de objetos Time_series
     """
+    from copy import deepcopy
+    from time_series import Time_series
     select_umbrales = project.find('select_umbrales').text.strip()
     umbral_col = int(project.find('select_umbrales').get('umbral_column')) - 1
     if select_umbrales.count('?') != 3:
         raise ValueError('select_umbrales debe tener 3 signos ?')
 
-    fechas_u = []
-    values_u = []
-    legends_u = []
+    ts = []
     for i, umbral in enumerate(project.findall('select_umbrales/umbral')):
         parametro = umbral.get('parametro').strip()
         cod_u = umbral.get('cod').strip()
@@ -132,13 +150,17 @@ def _umbrales_get(project, id1, cur2, fecha1, fecha2):
         # todos los umbrales se ponen en el rango de fechas de cada sondeo
         # si se desea ponerlo en su rango específico debe escribirse una
         # función ad hoc extrayendo los datos de la tabla umbrales
-        fechas_u.append([fecha1, fecha2])
-        values_u.append([row1_u[umbral_col], row1_u[umbral_col]])
-        legends_u.append(legends_umbrales_get(project, row1_u, i))
-    if not values_u:
+        fechas = [fecha1, fecha2]
+        values = [row1_u[umbral_col], row1_u[umbral_col]]
+        legend = legends_umbrales_get(project, row1_u, i)
+        try:
+            tmp = Time_series(fechas, values, legend, marker='')
+            ts.append(deepcopy(tmp))
+        except Exception as error:
+            continue
+    if not ts:
         lf.write('{0} no tiene umbrales'.format(id1))
-        return [], [], []
-    return fechas_u, values_u, legends_u
+    return ts
 
 
 def get_title(project, row):
@@ -167,7 +189,7 @@ def get_title(project, row):
     return '\n'.join(stitles)
 
 
-def legend_master_get(project, row):
+def _legend_main_get(project, row):
     """
     forma la leyenda de la serie principal del gráfico
 
@@ -237,23 +259,16 @@ def file_name_get(project, row):
     return sname
 
 
-def XYt_1(fechas, values, legend_master, fechas_u, values_u, legends_umbrales,
-          stitle, ylabel, dst):
+def XYt_1(t_series, stitle, ylabel, dst):
     """
     dibuja un gráfico xy de una o más series
 
     input
-        fechas: [d1, ...n] d1 elemento date, donde n es la longitud de
-            la serie
-        values: [v1, ...n] v1 elemento float, donde n es la longitud de
-            la serie
-        legend_master_get: leyenda de la serie principal
+        t_series: lista de objetos Time_series; el primer elemento se
+            considera la series principal
         stitle: título del gráfico
         ylabel: título del eje Y
         dst: directorio donde se graba el gráfico (debe existir)
-        fechas_u
-        values_u
-        legends_u
     """
     import matplotlib.pyplot as mpl
     import matplotlib.pyplot as plt
@@ -262,6 +277,7 @@ def XYt_1(fechas, values, legend_master, fechas_u, values_u, legends_umbrales,
     dateFmt = mdates.DateFormatter('%d-%m-%Y')
 
     fig, ax = plt.subplots()
+    # TODO: arreglar la llamada a través de un objeto Time_series
     ax.plot(fechas, values, marker='.', label=legend_master)
     for i, vu1 in enumerate(values_u):
         ax.plot(fechas_u, vu1, label=legends_umbrales[i])
@@ -318,15 +334,3 @@ def validate_parameters():
     par.date_2 = validate_date(par.date_2, 'date_2')
     if par.date_1 >= par.date_2:
         raise ValueError('date_1 debe ser < que date_2')
-
-    class Serie_temporal():
-        """
-        define los datos y sus atributos para ser representados en un
-            gráfico
-        """
-        def __init__(self, fechas: [], values: [], legends: [],
-                     markers: []):
-            """
-            fechas: cada elemento una lista de dates
-            """
-            pass
